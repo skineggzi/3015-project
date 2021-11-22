@@ -13,8 +13,13 @@ import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.net.Socket;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Scanner;
 import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -27,6 +32,11 @@ import javax.swing.border.LineBorder;
 enum PaintMode {Pixel, Area};
 
 public class UI extends JFrame {
+	
+	private static Socket socket;
+	private static DataInputStream in;
+	private static DataOutputStream out;
+	
 	private JTextField msgField;
 	private JTextArea chatArea;
 	private JPanel pnlColorPicker;
@@ -45,9 +55,15 @@ public class UI extends JFrame {
 	 * get the instance of UI. Singleton design pattern.
 	 * @return
 	 */
-	public static UI getInstance() {
+	public static UI getInstance(String server, int port) throws IOException {
+		socket = new Socket(server, port);
+		in = new DataInputStream(socket.getInputStream());
+		out = new DataOutputStream(socket.getOutputStream());
+		
+		
+		
 		if (instance == null)
-			instance = new UI();
+			instance = new UI(socket);
 		
 		return instance;
 	}
@@ -55,19 +71,22 @@ public class UI extends JFrame {
 	/**
 	 * private constructor. To create an instance of UI, call UI.getInstance() instead.
 	 */
-	private UI() {
+	private UI(Socket socket) {
+		
+		
 		setTitle("KidPaint");
 		
 		JPanel basePanel = new JPanel();
 		getContentPane().add(basePanel, BorderLayout.CENTER);
 		basePanel.setLayout(new BorderLayout(0, 0));
-		
-		paintPanel = new JPanel() {
+		//********************************************************************************
+		paintPanel = new JPanel() {			
 			
 			// refresh the paint panel
 			@Override
 			public void paint(Graphics g) {
 				super.paint(g);
+				
 				
 				Graphics2D g2 = (Graphics2D) g; // Graphics2D provides the setRenderingHints method
 				
@@ -81,6 +100,7 @@ public class UI extends JFrame {
 				g2.setColor(Color.black);
 				g2.fillRect(0, 0, this.getWidth(), this.getHeight());
 				
+				
 				// draw and fill circles with the specific colors stored in the data array
 				for(int x=0; x<data.length; x++) {
 					for (int y=0; y<data[0].length; y++) {
@@ -93,7 +113,10 @@ public class UI extends JFrame {
 			}
 		};
 		
+		
+		
 		paintPanel.addMouseListener(new MouseListener() {
+			
 			@Override public void mouseClicked(MouseEvent e) {}
 			@Override public void mouseEntered(MouseEvent e) {}
 			@Override public void mouseExited(MouseEvent e) {}
@@ -103,7 +126,18 @@ public class UI extends JFrame {
 			@Override
 			public void mouseReleased(MouseEvent e) {
 				if (paintMode == PaintMode.Area && e.getX() >= 0 && e.getY() >= 0)
-					paintArea(e.getX()/blockSize, e.getY()/blockSize);
+					paintArea(e.getX()/blockSize, e.getY()/blockSize,selectedColor);
+					int x = e.getX()/blockSize;
+					int y = e.getY()/blockSize;
+					/*		
+					String str = x + "," + y; 
+					try {
+						out.writeInt(str.length());
+						out.write(str.getBytes(), 0, str.length());
+					} catch (IOException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					}*/					
 			}
 		});
 		
@@ -111,8 +145,18 @@ public class UI extends JFrame {
 
 			@Override
 			public void mouseDragged(MouseEvent e) {
+				
 				if (paintMode == PaintMode.Pixel && e.getX() >= 0 && e.getY() >= 0)
-					paintPixel(e.getX()/blockSize,e.getY()/blockSize);
+					paintPixel(e.getX()/blockSize,e.getY()/blockSize,selectedColor);
+				/*
+					String str = e.getX()/blockSize + "," + e.getY()/blockSize; 
+					try {
+						out.writeInt(str.length());
+						out.write(str.getBytes(), 0, str.length());
+					} catch (IOException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					}*/
 			}
 
 			@Override public void mouseMoved(MouseEvent e) {}
@@ -189,7 +233,52 @@ public class UI extends JFrame {
 		msgPanel.setLayout(new BorderLayout(0, 0));
 		
 		msgField = new JTextField();	// text field for inputting message
+		Thread t = new Thread(() -> {
+			byte[] buffer = new byte[1024];
+			try {				
+				while (true) {
+					int len = in.readInt();					
+					in.read(buffer, 0, len);
+					String pointStr = new String(buffer, 0, len);
+					String point[] = pointStr.split(",");
+					int x = Integer.parseInt(point[0]);
+					int y = Integer.parseInt(point[1]);
+					int c = Integer.parseInt(point[2]);
+					if(pointStr != "" || !pointStr.isEmpty())
+						paintPixel(x,y,c);
+					//g2.setColor(color);
+					//paintPixel(x,y);
+					//paintPanel.repaint(x, y, blockSize, blockSize);
+				}
+			} catch (IOException ex) {
+				chatArea.setText("Connection dropped!");
+				System.exit(-1);
+			} catch (NumberFormatException ex) {
+				chatArea.setText("Error sending Message~");
+			}
+		});
+		t.start();
 		
+		/*Thread t = new Thread(() -> {
+			byte[] buffer = new byte[1024];
+			try {				
+				while (true) {
+					int len = in.readInt();					
+					in.read(buffer, 0, len);
+					String old = chatArea.getText();
+					if(old != "" || !old.isEmpty()){
+						chatArea.setText(old + '\n' +new String(buffer, 0, len));
+					}else {
+						chatArea.setText(new String(buffer, 0, len));
+					}
+					
+				}
+			} catch (IOException ex) {
+				chatArea.setText("Connection dropped!");
+				System.exit(-1);
+			}
+		});
+		t.start();*/
 		msgPanel.add(msgField, BorderLayout.SOUTH);
 		
 		// handle key-input event of the message field
@@ -198,10 +287,26 @@ public class UI extends JFrame {
 			@Override public void keyPressed(KeyEvent e) {}
 
 			@Override
-			public void keyReleased(KeyEvent e) {
-				if (e.getKeyCode() == 10) {		// if the user press ENTER
-					onTextInputted(msgField.getText());
-					msgField.setText("");
+			public void keyReleased(KeyEvent e){
+						// if the user press ENTER															
+					/*System.out.println("Please input your name:");
+					Scanner scannerName = new Scanner(System.in);
+					String strName = scannerName.nextLine();
+					System.out.println("Please input messages:");
+					Scanner scannerMessage = new Scanner(System.in);*/
+					if (e.getKeyCode() == 10) {
+						String strMessage = "Tester" + ": " + msgField.getText();
+						try {
+							out.writeInt(strMessage.length());
+							out.write(strMessage.getBytes(), 0, strMessage.length());
+							msgField.setText("");
+						} catch (IOException e1) {
+							// TODO Auto-generated catch block
+							e1.printStackTrace();
+						}
+					
+					//onTextInputted(msgField.getText());
+					//msgField.setText("");
 				}
 			}
 			
@@ -242,11 +347,21 @@ public class UI extends JFrame {
 	 * change the color of a specific pixel
 	 * @param col, row - the position of the selected pixel
 	 */
-	public void paintPixel(int col, int row) {
+	public void paintPixel(int col, int row, int c) {
+		
 		if (col >= data.length || row >= data[0].length) return;
 		
-		data[col][row] = selectedColor;
+		data[col][row] = c;
 		paintPanel.repaint(col * blockSize, row * blockSize, blockSize, blockSize);
+		
+		String str = col + "," + row + "," + selectedColor; 
+		try {
+			out.writeInt(str.length());
+			out.write(str.getBytes(), 0, str.length());
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
 	}
 	
 	/**
@@ -254,7 +369,7 @@ public class UI extends JFrame {
 	 * @param col, row - the position of the selected pixel
 	 * @return a list of modified pixels
 	 */
-	public List paintArea(int col, int row) {
+	public List paintArea(int col, int row, int c) {
 		LinkedList<Point> filledPixels = new LinkedList<Point>();
 
 		if (col >= data.length || row >= data[0].length) return filledPixels;
@@ -262,7 +377,7 @@ public class UI extends JFrame {
 		int oriColor = data[col][row];
 		LinkedList<Point> buffer = new LinkedList<Point>();
 		
-		if (oriColor != selectedColor) {
+		if (oriColor != c) {
 			buffer.add(new Point(col, row));
 			
 			while(!buffer.isEmpty()) {
@@ -272,16 +387,26 @@ public class UI extends JFrame {
 				
 				if (data[x][y] != oriColor) continue;
 				
-				data[x][y] = selectedColor;
+				data[x][y] = c;
 				filledPixels.add(p);
 	
 				if (x > 0 && data[x-1][y] == oriColor) buffer.add(new Point(x-1, y));
 				if (x < data.length - 1 && data[x+1][y] == oriColor) buffer.add(new Point(x+1, y));
 				if (y > 0 && data[x][y-1] == oriColor) buffer.add(new Point(x, y-1));
 				if (y < data[0].length - 1 && data[x][y+1] == oriColor) buffer.add(new Point(x, y+1));
+				
+				String str = x + "," + y + "," + selectedColor; 
+				try {
+					out.writeInt(str.length());
+					out.write(str.getBytes(), 0, str.length());
+				} catch (IOException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
 			}
 			paintPanel.repaint();
 		}
+		
 		return filledPixels;
 	}
 	
