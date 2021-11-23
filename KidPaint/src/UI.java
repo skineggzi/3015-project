@@ -33,9 +33,9 @@ enum PaintMode {Pixel, Area};
 
 public class UI extends JFrame {
 	
-	private static Socket socket;
-	private static DataInputStream in;
-	private static DataOutputStream out;
+	private Socket socket;
+	private DataInputStream in;
+	private DataOutputStream out;
 	
 	private JTextField msgField;
 	private JTextArea chatArea;
@@ -43,6 +43,7 @@ public class UI extends JFrame {
 	private JPanel paintPanel;
 	private JToggleButton tglPen;
 	private JToggleButton tglBucket;
+	private static int port = 12345;
 	
 	private static UI instance;
 	private int selectedColor = -543230; 	//golden
@@ -55,50 +56,47 @@ public class UI extends JFrame {
 	 * get the instance of UI. Singleton design pattern.
 	 * @return
 	 */
-	public static UI getInstance(String server, int port) throws IOException {
-		socket = new Socket(server, port);
-		in = new DataInputStream(socket.getInputStream());
-		out = new DataOutputStream(socket.getOutputStream());
-		
-		
-		
+	public static UI getInstance(String ip) throws IOException {
 		if (instance == null)
-			instance = new UI(socket);
+			instance = new UI(ip);
 		
+		return instance;
+	}
+	public static UI getInstance() throws IOException {
 		return instance;
 	}
 	
 	/**
 	 * private constructor. To create an instance of UI, call UI.getInstance() instead.
+	 * @throws IOException 
 	 */
-	private UI(Socket socket) {
+	private UI(String ip) throws IOException {
+		socket = new Socket(ip, port);
+		in = new DataInputStream(socket.getInputStream());
+		out = new DataOutputStream(socket.getOutputStream());
 		
 		Thread t = new Thread(() -> {
 			byte[] buffer = new byte[1024];
 			try {				
 				while (true) {
-					int len = in.readInt();					
-					in.read(buffer, 0, len);
-					String pointStr = new String(buffer, 0, len);
-					String point[] = pointStr.split(",");
-					int x = Integer.parseInt(point[0]);
-					int y = Integer.parseInt(point[1]);
-					int c = Integer.parseInt(point[2]);
-					if(pointStr != "" || !pointStr.isEmpty())
-						paintPixel(x,y,c);
-					else
-						break;
-					//g2.setColor(color);
-					//paintPixel(x,y);
-					//paintPanel.repaint(x, y, blockSize, blockSize);
-					System.out.println(pointStr);
+					int function = in.readInt();
+					
+					if(function == 1) {		//pen			
+						int col = in.readInt();
+						int row = in.readInt();
+						selectedColor = in.readInt();
+						update_paintPixel(col, row);
+					}else if(function == 2) { //bucket
+						int col = in.readInt();
+						int row = in.readInt();
+						selectedColor = in.readInt();
+						update_paintArea(col, row);
+					}
 				}
 			} catch (IOException ex) {
 				System.out.println("receive error");
 				chatArea.setText("Connection dropped!");
 				System.exit(-1);
-			} catch (NumberFormatException ex) {
-				System.out.println("receive error NFE");
 			}
 		});
 		t.start();
@@ -155,7 +153,12 @@ public class UI extends JFrame {
 			@Override
 			public void mouseReleased(MouseEvent e) {
 				if (paintMode == PaintMode.Area && e.getX() >= 0 && e.getY() >= 0)
-					paintArea(e.getX()/blockSize, e.getY()/blockSize,0);
+					try {
+						paintArea(e.getX()/blockSize, e.getY()/blockSize);
+					} catch (IOException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					}
 					int x = e.getX()/blockSize;
 					int y = e.getY()/blockSize;
 					/*		
@@ -176,7 +179,12 @@ public class UI extends JFrame {
 			public void mouseDragged(MouseEvent e) {
 				
 				if (paintMode == PaintMode.Pixel && e.getX() >= 0 && e.getY() >= 0)
-					paintPixel(e.getX()/blockSize,e.getY()/blockSize,0);
+					try {
+						paintPixel(e.getX()/blockSize,e.getY()/blockSize);
+					} catch (IOException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					}
 				/*
 					String str = e.getX()/blockSize + "," + e.getY()/blockSize; 
 					try {
@@ -318,33 +326,60 @@ public class UI extends JFrame {
 	private void onTextInputted(String text) {
 		chatArea.setText(chatArea.getText() + text + "\n");
 	}
+	//update new paint
+	public void update_paintPixel(int col, int row) {
+		if (col >= data.length || row >= data[0].length) return;
+		
+		data[col][row] = selectedColor;
+		paintPanel.repaint(col * blockSize, row * blockSize, blockSize, blockSize);
+	}
 	
 	/**
 	 * change the color of a specific pixel
 	 * @param col, row - the position of the selected pixel
+	 * @throws IOException 
 	 */
-	public void paintPixel(int col, int row, int c) {
-		
+	public void paintPixel(int col, int row) throws IOException {
 		if (col >= data.length || row >= data[0].length) return;
-		if(c==0) {
+		data[col][row] = selectedColor;
+		paintPanel.repaint(col * blockSize, row * blockSize, blockSize, blockSize);
+		out.writeInt(1);
+		out.writeInt(col);
+		out.writeInt(row);
+		out.writeInt(selectedColor);
+		
+	}
+	
+	public List update_paintArea(int col, int row){
+		LinkedList<Point> filledPixels = new LinkedList<Point>();
+
+		if (col >= data.length || row >= data[0].length) return filledPixels;
+
+		int oriColor = data[col][row];
+		LinkedList<Point> buffer = new LinkedList<Point>();
+		
+		if (oriColor != selectedColor) {
+			buffer.add(new Point(col, row));
 			
-			String str = col + "," + row + "," + selectedColor; 
-			try {
-				out.writeInt(str.length());
-				out.write(str.getBytes(), 0, str.length());
-			} catch (IOException e1) {
-				System.out.println("send error");
-				// TODO Auto-generated catch block
-				e1.printStackTrace();
+			while(!buffer.isEmpty()) {
+				Point p = buffer.removeFirst();
+				int x = p.x;
+				int y = p.y;
+				
+				if (data[x][y] != oriColor) continue;
+				
+				data[x][y] = selectedColor;
+				filledPixels.add(p);
+	
+				if (x > 0 && data[x-1][y] == oriColor) buffer.add(new Point(x-1, y));
+				if (x < data.length - 1 && data[x+1][y] == oriColor) buffer.add(new Point(x+1, y));
+				if (y > 0 && data[x][y-1] == oriColor) buffer.add(new Point(x, y-1));
+				if (y < data[0].length - 1 && data[x][y+1] == oriColor) buffer.add(new Point(x, y+1));
 			}
-			
-			data[col][row] = selectedColor;
-			paintPanel.repaint(col * blockSize, row * blockSize, blockSize, blockSize);		
-		}else {
-			
-			data[col][row] = c;
-			paintPanel.repaint(col * blockSize, row * blockSize, blockSize, blockSize);	
+			paintPanel.repaint();
 		}
+		
+		return filledPixels;
 		
 	}
 	
@@ -352,114 +387,42 @@ public class UI extends JFrame {
 	 * change the color of a specific area
 	 * @param col, row - the position of the selected pixel
 	 * @return a list of modified pixels
+	 * @throws IOException 
 	 */
-	public List paintArea(int col, int row, int c) {
+	public List paintArea(int col, int row) throws IOException {
 		LinkedList<Point> filledPixels = new LinkedList<Point>();
-		if(c==0) {			
-			
-	
-			if (col >= data.length || row >= data[0].length) return filledPixels;
-	
-			int oriColor = data[col][row];
-			LinkedList<Point> buffer = new LinkedList<Point>();
-			
-			if (oriColor != selectedColor) {
-				buffer.add(new Point(col, row));
-				
-				while(!buffer.isEmpty()) {
-					
-					Point p = buffer.removeFirst();
-					int x = p.x;
-					int y = p.y;
-					
-					
-					
-					if (data[x][y] != oriColor) continue;
-					
-					data[x][y] = selectedColor;
-					filledPixels.add(p);
-					
-					if (x > 0 && data[x-1][y] == oriColor) buffer.add(new Point(x-1, y));
-					if (x < data.length - 1 && data[x+1][y] == oriColor) buffer.add(new Point(x+1, y));
-					if (y > 0 && data[x][y-1] == oriColor) buffer.add(new Point(x, y-1));
-					if (y < data[0].length - 1 && data[x][y+1] == oriColor) buffer.add(new Point(x, y+1));
-									
-				}
-				paintPanel.repaint();
-			}
-			
-		}else {
-			
-			if (col >= data.length || row >= data[0].length) return filledPixels;
-	
-			int oriColor = data[col][row];
-			LinkedList<Point> buffer = new LinkedList<Point>();
-			
-			if (oriColor != selectedColor) {
-				buffer.add(new Point(col, row));
-				
-				while(!buffer.isEmpty()) {
-					
-					Point p = buffer.removeFirst();
-					int x = p.x;
-					int y = p.y;
-					
-					
-					if (data[x][y] != oriColor) continue;
-					
-					data[x][y] = c;
-					filledPixels.add(p);
+
+		if (col >= data.length || row >= data[0].length) return filledPixels;
+
+		int oriColor = data[col][row];
+		LinkedList<Point> buffer = new LinkedList<Point>();
 		
-					if (x > 0 && data[x-1][y] == oriColor) {
-						buffer.add(new Point(x-1, y));
-						String str = (x-1) + "," + y + "," + c; 
-						try {
-							out.writeInt(str.length());
-							out.write(str.getBytes(), 0, str.length());
-						} catch (IOException e1) {
-							// TODO Auto-generated catch block
-							e1.printStackTrace();
-						}
-					}
-					if (x < data.length - 1 && data[x+1][y] == oriColor) {
-						buffer.add(new Point(x+1, y));
-						String str = (x+1) + "," + y + "," + c; 
-						try {
-							out.writeInt(str.length());
-							out.write(str.getBytes(), 0, str.length());
-						} catch (IOException e1) {
-							// TODO Auto-generated catch block
-							e1.printStackTrace();
-						}
-					}
-					if (y > 0 && data[x][y-1] == oriColor) {
-						buffer.add(new Point(x, y-1));
-						String str = x + "," + (y-1) + "," + c; 
-						try {
-							out.writeInt(str.length());
-							out.write(str.getBytes(), 0, str.length());
-						} catch (IOException e1) {
-							// TODO Auto-generated catch block
-							e1.printStackTrace();
-						}
-					}
-					if (y < data[0].length - 1 && data[x][y+1] == oriColor) {
-						buffer.add(new Point(x, y+1));
-						String str = x + "," + (y+1) + "," + c; 
-						try {
-							out.writeInt(str.length());
-							out.write(str.getBytes(), 0, str.length());
-						} catch (IOException e1) {
-							// TODO Auto-generated catch block
-							e1.printStackTrace();
-						}
-					}
-	
-				}
-				paintPanel.repaint();
+		if (oriColor != selectedColor) {
+			buffer.add(new Point(col, row));
+			
+			while(!buffer.isEmpty()) {
+				Point p = buffer.removeFirst();
+				int x = p.x;
+				int y = p.y;
 				
+				if (data[x][y] != oriColor) continue;
+				
+				data[x][y] = selectedColor;
+				filledPixels.add(p);
+	
+				if (x > 0 && data[x-1][y] == oriColor) buffer.add(new Point(x-1, y));
+				if (x < data.length - 1 && data[x+1][y] == oriColor) buffer.add(new Point(x+1, y));
+				if (y > 0 && data[x][y-1] == oriColor) buffer.add(new Point(x, y-1));
+				if (y < data[0].length - 1 && data[x][y+1] == oriColor) buffer.add(new Point(x, y+1));
 			}
+			paintPanel.repaint();
 		}
+		
+		out.writeInt(2);
+		out.writeInt(col);
+		out.writeInt(row);
+		out.writeInt(selectedColor);
+		
 		return filledPixels;
 		
 	}

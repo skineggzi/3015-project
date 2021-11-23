@@ -1,15 +1,20 @@
 import java.io.DataInputStream;
+import java.awt.Point;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
 
-public class SimpleChatServer {
+public class KidPaintServer{
 	ServerSocket srvSocket;
 	ArrayList<Socket> list = new ArrayList<Socket>();
+	static int port = 12345;
+	int[][] data;
 
-	public SimpleChatServer(int port) throws IOException {
+	public KidPaintServer() throws IOException {
 		srvSocket = new ServerSocket(port);
 
 		while (true) {
@@ -33,6 +38,7 @@ public class SimpleChatServer {
 			});
 			t.start();
 		}
+
 	}
 
 	private void serve(Socket clientSocket) throws IOException {
@@ -43,22 +49,31 @@ public class SimpleChatServer {
 		DataInputStream in = new DataInputStream(clientSocket.getInputStream());
 		DataOutputStream out = new DataOutputStream(clientSocket.getOutputStream());
 		while (true) {
-			int len = in.readInt();
-			in.read(buffer, 0, len);
-			forward(buffer, len, clientSocket);
+			int function = in.readInt();
+			if(function == 1) {
+				int col = in.readInt();
+				int row = in.readInt();
+				int selectedColor = in.readInt();
+				forwardPen(selectedColor, col, row);
+			}else if(function == 2) {
+				int col = in.readInt();
+				int row = in.readInt();
+				int selectedColor = in.readInt();
+				forwardArea(selectedColor, col, row);
+			}
 		}
 	}
 
-	private void forward(byte[] data, int len, Socket s) {
+	private void forwardPen(int selectedColor, int col, int row) {
 		synchronized (list) {
 			for (int i = 0; i < list.size(); i++) {
-				try {				
-						Socket socket = list.get(i);
-						if(socket!=s) {
-							DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-							out.writeInt(len);
-							out.write(data, 0, len);
-					}
+				try { 
+					Socket socket = list.get(i);
+						DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+						out.writeInt(1);
+						out.writeInt(col);
+						out.writeInt(row);
+						out.writeInt(selectedColor);
 				} catch (IOException e) {
 					// the connection is dropped but the socket is not yet removed.
 				}
@@ -66,9 +81,25 @@ public class SimpleChatServer {
 		}
 	}
 	
-
-	public static void main(String[] args) throws IOException {
-		new SimpleChatServer(12345);
+	private void forwardArea(int selectedColor, int col, int row) {
+		synchronized (list) {
+			for (int i = 0; i < list.size(); i++) {
+				try { 
+					Socket socket = list.get(i);
+						DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+						out.writeInt(2);
+						out.writeInt(col);
+						out.writeInt(row);
+						out.writeInt(selectedColor);
+				} catch (IOException e) {
+					// the connection is dropped but the socket is not yet removed.
+				}
+			}
+		}
 	}
 
+	public static void main(String[] args) throws IOException {
+		new KidPaintServer();
+	}
+	
 }
