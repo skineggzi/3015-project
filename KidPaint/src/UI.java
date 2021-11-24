@@ -1,3 +1,4 @@
+import javax.swing.Action;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import java.awt.BorderLayout;
@@ -32,10 +33,10 @@ import javax.swing.border.LineBorder;
 enum PaintMode {Pixel, Area};
 
 public class UI extends JFrame {
-	
 	private Socket socket;
 	private DataInputStream in;
 	private DataOutputStream out;
+	private static int port = 12345;
 	
 	private JTextField msgField;
 	private JTextArea chatArea;
@@ -43,7 +44,6 @@ public class UI extends JFrame {
 	private JPanel paintPanel;
 	private JToggleButton tglPen;
 	private JToggleButton tglBucket;
-	private static int port = 12345;
 	
 	private static UI instance;
 	private int selectedColor = -543230; 	//golden
@@ -56,9 +56,9 @@ public class UI extends JFrame {
 	 * get the instance of UI. Singleton design pattern.
 	 * @return
 	 */
-	public static UI getInstance(String ip) throws IOException {
+	public static UI getInstance(String ip, String username) throws IOException {
 		if (instance == null)
-			instance = new UI(ip);
+			instance = new UI(ip, username);
 		
 		return instance;
 	}
@@ -70,7 +70,7 @@ public class UI extends JFrame {
 	 * private constructor. To create an instance of UI, call UI.getInstance() instead.
 	 * @throws IOException 
 	 */
-	private UI(String ip) throws IOException {
+	private UI(String ip, String username) throws IOException {
 		socket = new Socket(ip, port);
 		in = new DataInputStream(socket.getInputStream());
 		out = new DataOutputStream(socket.getOutputStream());
@@ -91,6 +91,11 @@ public class UI extends JFrame {
 						int row = in.readInt();
 						selectedColor = in.readInt();
 						update_paintArea(col, row);
+					}else if(function == 3) {
+						int len = in.readInt();
+						in.read(buffer, 0, len);
+						String msg = new String(buffer, 0, len);
+						update_msg(msg);
 					}
 				}
 			} catch (IOException ex) {
@@ -101,7 +106,7 @@ public class UI extends JFrame {
 		});
 		t.start();
 		
-		setTitle("KidPaint");
+		setTitle("KidPaint ["+username+"]");
 		
 		JPanel basePanel = new JPanel();
 		getContentPane().add(basePanel, BorderLayout.CENTER);
@@ -294,7 +299,35 @@ public class UI extends JFrame {
 		msgPanel.add(msgField, BorderLayout.SOUTH);
 		
 		// handle key-input event of the message field
-	
+		msgField.addKeyListener(new KeyListener() {
+
+			@Override
+			public void keyTyped(KeyEvent e) {
+				// TODO Auto-generated method stub
+				
+			}
+
+			@Override
+			public void keyPressed(KeyEvent e) {
+				// TODO Auto-generated method stub
+				if(e.getKeyCode()==KeyEvent.VK_ENTER) {
+					try {
+						onTextInputted("["+username+"]: " + msgField.getText()); //username+msg
+					} catch (IOException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					}
+				}
+			}
+
+			@Override
+			public void keyReleased(KeyEvent e) {
+				// TODO Auto-generated method stub
+				
+			}
+			
+		});
+		
 		
 		chatArea = new JTextArea();		// the read only text area for showing messages
 		chatArea.setEditable(false);
@@ -319,12 +352,21 @@ public class UI extends JFrame {
 		});
 	}
 		 
+	private void update_msg(String text) {
+		chatArea.setText(chatArea.getText() + text + "\n");
+	}
+	
 	/**
 	 * it will be invoked if the user inputted text in the message field
 	 * @param text - user inputted text
+	 * @throws IOException 
 	 */
-	private void onTextInputted(String text) {
-		chatArea.setText(chatArea.getText() + text + "\n");
+	private void onTextInputted(String text) throws IOException {
+		//chatArea.setText(chatArea.getText() + text + "\n");
+		
+		out.writeInt(3);
+		out.writeInt(text.length());
+		out.write(text.getBytes(), 0, text.length());
 	}
 	//update new paint
 	public void update_paintPixel(int col, int row) {
@@ -343,6 +385,7 @@ public class UI extends JFrame {
 		if (col >= data.length || row >= data[0].length) return;
 		data[col][row] = selectedColor;
 		paintPanel.repaint(col * blockSize, row * blockSize, blockSize, blockSize);
+		
 		out.writeInt(1);
 		out.writeInt(col);
 		out.writeInt(row);

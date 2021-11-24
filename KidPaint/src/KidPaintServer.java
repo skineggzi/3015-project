@@ -40,6 +40,10 @@ public class KidPaintServer{
 		}
 
 	}
+	
+	private void udpServe(String str, String destIP, int port) throws IOException {
+		
+	}
 
 	private void serve(Socket clientSocket) throws IOException {
 		byte[] buffer = new byte[1024];
@@ -60,6 +64,10 @@ public class KidPaintServer{
 				int row = in.readInt();
 				int selectedColor = in.readInt();
 				forwardArea(selectedColor, col, row);
+			}else if(function == 3) {
+				int len = in.readInt();
+				in.read(buffer, 0, len);
+				forwardMsg(buffer, len);
 			}
 		}
 	}
@@ -69,11 +77,11 @@ public class KidPaintServer{
 			for (int i = 0; i < list.size(); i++) {
 				try { 
 					Socket socket = list.get(i);
-						DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-						out.writeInt(1);
-						out.writeInt(col);
-						out.writeInt(row);
-						out.writeInt(selectedColor);
+					DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+					out.writeInt(1);
+					out.writeInt(col);
+					out.writeInt(row);
+					out.writeInt(selectedColor);
 				} catch (IOException e) {
 					// the connection is dropped but the socket is not yet removed.
 				}
@@ -86,11 +94,11 @@ public class KidPaintServer{
 			for (int i = 0; i < list.size(); i++) {
 				try { 
 					Socket socket = list.get(i);
-						DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-						out.writeInt(2);
-						out.writeInt(col);
-						out.writeInt(row);
-						out.writeInt(selectedColor);
+					DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+					out.writeInt(2);
+					out.writeInt(col);
+					out.writeInt(row);
+					out.writeInt(selectedColor);
 				} catch (IOException e) {
 					// the connection is dropped but the socket is not yet removed.
 				}
@@ -98,6 +106,22 @@ public class KidPaintServer{
 		}
 	}
 
+	private void forwardMsg(byte[] data, int len) {
+		synchronized (list) {
+			for (int i = 0; i < list.size(); i++) {
+				try {
+					Socket socket = list.get(i);
+					DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+					out.writeInt(3);
+					out.writeInt(len);
+					out.write(data, 0, len);
+				} catch (IOException e) {
+					// the connection is dropped but the socket is not yet removed.
+				}
+			}
+		}
+	}
+	
 	public static void main(String[] args) throws IOException {
 		new KidPaintServer();
 	}
