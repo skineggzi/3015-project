@@ -18,12 +18,14 @@ public class KidPaint {
 	}
 	
 	public static void main(String[] args) throws IOException, InterruptedException {
+		System.setProperty("java.net.preferIPv4Stack", "true");
 		String username;
 		
 		InetAddress ip = InetAddress.getLocalHost();
 		username = JOptionPane.showInputDialog("Please input your username");
 		
 		new KidPaint(username, ip.getHostAddress());
+		
 
 	}
 }

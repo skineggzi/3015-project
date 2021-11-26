@@ -185,6 +185,7 @@ public class KidPaintServer{
 	}
 	
 	public static void main(String[] args) throws IOException {
+		System.setProperty("java.net.preferIPv4Stack", "true");
 		new KidPaintServer();
 	}
 	
