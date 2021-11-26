@@ -72,9 +72,9 @@ public class UI extends JFrame {
 	 * get the instance of UI. Singleton design pattern.
 	 * @return
 	 */
-	public static UI getInstance(String ip) throws IOException {
+	public static UI getInstance(String ip, String username) throws IOException {
 		if (instance == null)
-			instance = new UI(ip);
+			instance = new UI(ip, username);
 		
 		return instance;
 	}
@@ -86,7 +86,8 @@ public class UI extends JFrame {
 	 * private constructor. To create an instance of UI, call UI.getInstance() instead.
 	 * @throws IOException 
 	 */
-	private UI(String ip) throws IOException {
+	private UI(String ip, String username) throws IOException {
+		this.username = username;
 		socket = new Socket(ip, port);
 		in = new DataInputStream(socket.getInputStream());
 		out = new DataOutputStream(socket.getOutputStream());
@@ -133,7 +134,7 @@ public class UI extends JFrame {
 		});
 		t.start();
 		
-		setTitle("KidPaint");
+		setTitle("KidPaint ["+username+"]");
 		
 		JPanel basePanel = new JPanel();
 		getContentPane().add(basePanel, BorderLayout.CENTER);
@@ -561,7 +562,7 @@ public class UI extends JFrame {
 	public void update_chat(String text){
 		if (text.length()==0) return;
 		String old = chatArea.getText();
-		if(old != "" || !old.isEmpty()){
+		if(old != "" || !old. isEmpty()){
 			chatArea.setText(old + '\n' + text);
 		}else {
 			chatArea.setText(text);

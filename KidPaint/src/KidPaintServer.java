@@ -40,10 +40,6 @@ public class KidPaintServer{
 		}
 
 	}
-	
-	private void udpServe(String str, String destIP, int port) throws IOException {
-		
-	}
 
 	private void serve(Socket clientSocket) throws IOException {
 		byte[] buffer = new byte[1024];
@@ -58,30 +54,42 @@ public class KidPaintServer{
 				int col = in.readInt();
 				int row = in.readInt();
 				int selectedColor = in.readInt();
-				forwardPen(selectedColor, col, row);
+				forwardPen(selectedColor, col, row,clientSocket);
 			}else if(function == 2) {
 				int col = in.readInt();
 				int row = in.readInt();
 				int selectedColor = in.readInt();
-				forwardArea(selectedColor, col, row);
+				forwardArea(selectedColor, col, row,clientSocket);
 			}else if(function == 3) {
 				int len = in.readInt();
 				in.read(buffer, 0, len);
-				forwardMsg(buffer, len);
+				String text = new String(buffer, 0, len);
+				forwardChat(text, len,clientSocket);
+			}else if(function == 10) {
+				forwardSave(clientSocket);
+			}else if(function == 11) {
+				forwardReload(clientSocket);
+			}else if(function == 0) {
+				int len = in.readInt();
+				in.read(buffer, 0, len);
+				String name = new String(buffer, 0, len);
+				forwardJoin(name, len,clientSocket);
 			}
 		}
 	}
 
-	private void forwardPen(int selectedColor, int col, int row) {
+	private void forwardPen(int selectedColor, int col, int row, Socket s) {
 		synchronized (list) {
 			for (int i = 0; i < list.size(); i++) {
 				try { 
 					Socket socket = list.get(i);
-					DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-					out.writeInt(1);
-					out.writeInt(col);
-					out.writeInt(row);
-					out.writeInt(selectedColor);
+					if(socket!=s) {
+						DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+						out.writeInt(1);
+						out.writeInt(col);
+						out.writeInt(row);
+						out.writeInt(selectedColor);
+					}
 				} catch (IOException e) {
 					// the connection is dropped but the socket is not yet removed.
 				}
@@ -89,16 +97,18 @@ public class KidPaintServer{
 		}
 	}
 	
-	private void forwardArea(int selectedColor, int col, int row) {
+	private void forwardArea(int selectedColor, int col, int row, Socket s) {
 		synchronized (list) {
 			for (int i = 0; i < list.size(); i++) {
 				try { 
 					Socket socket = list.get(i);
-					DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-					out.writeInt(2);
-					out.writeInt(col);
-					out.writeInt(row);
-					out.writeInt(selectedColor);
+					if(socket!=s) {
+						DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+						out.writeInt(2);
+						out.writeInt(col);
+						out.writeInt(row);
+						out.writeInt(selectedColor);
+					}
 				} catch (IOException e) {
 					// the connection is dropped but the socket is not yet removed.
 				}
@@ -106,15 +116,67 @@ public class KidPaintServer{
 		}
 	}
 
-	private void forwardMsg(byte[] data, int len) {
+	private void forwardChat(String text, int len, Socket s) {
 		synchronized (list) {
 			for (int i = 0; i < list.size(); i++) {
-				try {
+				try { 
 					Socket socket = list.get(i);
-					DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-					out.writeInt(3);
-					out.writeInt(len);
-					out.write(data, 0, len);
+					//if(socket!=s) {
+						DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+						out.writeInt(3);
+						out.writeInt(len);
+						out.write(text.getBytes(), 0, len);
+					//}
+				} catch (IOException e) {
+					// the connection is dropped but the socket is not yet removed.
+				}
+			}
+		}
+	}
+	
+	private void forwardJoin(String name, int len, Socket s) {
+		synchronized (list) {
+			for (int i = 0; i < list.size(); i++) {
+				try { 
+					Socket socket = list.get(i);
+					if(socket!=s) {
+						DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+						out.writeInt(0);
+						out.writeInt(len);
+						out.write(name.getBytes(), 0, len);
+					}
+				} catch (IOException e) {
+					// the connection is dropped but the socket is not yet removed.
+				}
+			}
+		}
+	}
+	
+	private void forwardSave(Socket s) {
+		synchronized (list) {
+			for (int i = 0; i < list.size(); i++) {
+				try { 
+					Socket socket = list.get(i);
+					if(socket==s) {
+						DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+						out.writeInt(10);
+					}
+				} catch (IOException e) {
+					// the connection is dropped but the socket is not yet removed.
+				}
+			}
+		}
+	}
+	
+	private void forwardReload(Socket s) {
+		synchronized (list) {
+			for (int i = 0; i < list.size(); i++) {
+				try { 
+					Socket socket = list.get(i);
+					if(socket==s) {
+						DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+						out.writeInt(11);
+					}
 				} catch (IOException e) {
 					// the connection is dropped but the socket is not yet removed.
 				}
